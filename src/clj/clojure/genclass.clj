@@ -253,7 +253,7 @@
             (. gen (endMethod))))
         ]
                                         ;start class definition
-    (. cv (visit (. Opcodes V1_5) (+ (. Opcodes ACC_PUBLIC) (. Opcodes ACC_SUPER))
+    (. cv (visit (. Opcodes V1_7) (+ (. Opcodes ACC_PUBLIC) (. Opcodes ACC_SUPER))
                  cname nil (iname super)
                  (when-let [ifc (seq interfaces)]
                    (into-array (map iname ifc)))))
@@ -663,7 +663,7 @@
       (IllegalArgumentException. "Interface methods must not contain '-'")))
   (let [iname (.replace (str name) "." "/")
         cv (Compiler$DynamicClassWriter. (+ ClassWriter/COMPUTE_MAXS ClassWriter/COMPUTE_FRAMES))]
-    (. cv visit Opcodes/V1_5 (+ Opcodes/ACC_PUBLIC 
+    (. cv visit Opcodes/V1_7 (+ Opcodes/ACC_PUBLIC 
                                 Opcodes/ACC_ABSTRACT
                                 Opcodes/ACC_INTERFACE)
        iname nil "java/lang/Object"
