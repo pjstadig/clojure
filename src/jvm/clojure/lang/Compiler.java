@@ -35,7 +35,20 @@ import org.objectweb.asm.util.CheckClassAdapter;
 //*/
 
 public class Compiler implements Opcodes{
-
+  public static class DynamicClassWriter extends ClassWriter {
+    public DynamicClassWriter(final int flags) {
+      super(flags);
+    }
+    public DynamicClassWriter(final ClassReader classReader, final int flags) {
+      super(classReader, flags);
+    }
+    
+    @Override
+    protected String getCommonSuperClass(String type1, String type2) {
+      return "java/lang/Object";
+    }
+  }
+  
 static final Symbol DEF = Symbol.intern("def");
 static final Symbol LOOP = Symbol.intern("loop*");
 static final Symbol RECUR = Symbol.intern("recur");
@@ -4001,7 +4014,7 @@ static public class ObjExpr implements Expr{
 		//with name current_ns.defname[$letname]+
 		//anonymous fns get names fn__id
 		//derived from AFn/RestFn
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new DynamicClassWriter(DynamicClassWriter.COMPUTE_MAXS + DynamicClassWriter.COMPUTE_FRAMES);
 //		ClassWriter cw = new ClassWriter(0);
 		ClassVisitor cv = cw;
 //		ClassVisitor cv = new TraceClassVisitor(new CheckClassAdapter(cw), new PrintWriter(System.out));
@@ -7199,7 +7212,7 @@ public static Object compile(Reader rdr, String sourcePath, String sourceName) t
 		                  + RT.LOADER_SUFFIX;
 
 		objx.objtype = Type.getObjectType(objx.internalName);
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new DynamicClassWriter(DynamicClassWriter.COMPUTE_MAXS + DynamicClassWriter.COMPUTE_FRAMES);
 		ClassVisitor cv = cw;
 		cv.visit(V1_5, ACC_PUBLIC + ACC_SUPER, objx.internalName, null, "java/lang/Object", null);
 
@@ -7509,7 +7522,7 @@ static public class NewInstanceExpr extends ObjExpr{
 	 * Unmunge the name (using a magic prefix) on any code gen for classes
 	 */
 	static Class compileStub(String superName, NewInstanceExpr ret, String[] interfaceNames, Object frm){
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new DynamicClassWriter(DynamicClassWriter.COMPUTE_MAXS + DynamicClassWriter.COMPUTE_FRAMES);
 		ClassVisitor cv = cw;
 		cv.visit(V1_5, ACC_PUBLIC + ACC_SUPER, COMPILE_STUB_PREFIX + "/" + ret.internalName,
 		         null,superName,interfaceNames);

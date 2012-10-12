@@ -14,7 +14,7 @@
  '(clojure.asm ClassWriter ClassVisitor Opcodes Type) 
  '(java.lang.reflect Modifier Constructor)
  '(clojure.asm.commons Method GeneratorAdapter)
- '(clojure.lang IProxy Reflector DynamicClassLoader IPersistentMap PersistentHashMap RT))
+ '(clojure.lang IProxy Reflector DynamicClassLoader Compiler$DynamicClassWriter IPersistentMap PersistentHashMap RT))
 
 (defn method-sig [^java.lang.reflect.Method meth]
   [(. meth (getName)) (seq (. meth (getParameterTypes))) (. meth getReturnType)])
@@ -43,7 +43,7 @@
           [(Integer/toHexString (hash inames))])))))
 
 (defn- generate-proxy [^Class super interfaces]
-  (let [cv (new ClassWriter (. ClassWriter COMPUTE_MAXS))
+  (let [cv (new Compiler$DynamicClassWriter (+ (. ClassWriter COMPUTE_MAXS) (. ClassWriter COMPUTE_FRAMES)))
         cname (.replace (proxy-name super interfaces) \. \/) ;(str "clojure/lang/" (gensym "Proxy__"))
         ctype (. Type (getObjectType cname))
         iname (fn [^Class c] (.. Type (getType c) (getInternalName)))

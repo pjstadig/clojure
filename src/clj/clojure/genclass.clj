@@ -11,7 +11,7 @@
 (import '(java.lang.reflect Modifier Constructor)
         '(clojure.asm ClassWriter ClassVisitor Opcodes Type)
         '(clojure.asm.commons Method GeneratorAdapter)
-        '(clojure.lang IPersistentMap))
+        '(clojure.lang Compiler$DynamicClassWriter IPersistentMap))
 
 ;(defn method-sig [^java.lang.reflect.Method meth]
 ;  [(. meth (getName)) (seq (. meth (getParameterTypes)))])
@@ -133,7 +133,7 @@
         interfaces (map the-class implements)
         supers (cons super interfaces)
         ctor-sig-map (or constructors (zipmap (ctor-sigs super) (ctor-sigs super)))
-        cv (new ClassWriter (. ClassWriter COMPUTE_MAXS))
+        cv (new Compiler$DynamicClassWriter (+ (. ClassWriter COMPUTE_MAXS) (. ClassWriter COMPUTE_FRAMES)))
         cname (. name (replace "." "/"))
         pkg-name name
         impl-pkg-name (str impl-ns)
@@ -662,7 +662,7 @@
     (throw
       (IllegalArgumentException. "Interface methods must not contain '-'")))
   (let [iname (.replace (str name) "." "/")
-        cv (ClassWriter. ClassWriter/COMPUTE_MAXS)]
+        cv (Compiler$DynamicClassWriter. (+ ClassWriter/COMPUTE_MAXS ClassWriter/COMPUTE_FRAMES))]
     (. cv visit Opcodes/V1_5 (+ Opcodes/ACC_PUBLIC 
                                 Opcodes/ACC_ABSTRACT
                                 Opcodes/ACC_INTERFACE)
