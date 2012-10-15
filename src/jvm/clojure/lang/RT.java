@@ -19,7 +19,14 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.io.*;
+import java.lang.invoke.CallSite;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.MutableCallSite;
 import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.security.AccessController;
@@ -2251,5 +2258,48 @@ static public Object[] aclone(Object[] xs){
 	return xs.clone();
 }
 
+public static class CachedInstanceMethod extends MutableCallSite {
+  private final Lookup lookup;
+  private final String methodName;
+  
+  public CachedInstanceMethod(Lookup lookup, String methodName, MethodType mt) {
+    super(mt);
+    this.lookup = lookup;
+    this.methodName = methodName;
+  }
+  
+  public Object fallback(Object ... objects) throws Throwable {
+    Object receiver = objects[0];
+    Object[] args = new Object[objects.length - 1];
+    System.arraycopy(objects, 1, args, 0, args.length);
+    Method method = Reflector.findInstanceMethod(receiver, methodName, args);
+    MethodHandle target = lookup.unreflect(method);
+    MethodType targetType = target.type();
+    target = target.asType(type());
+    target = MethodHandles.filterReturnValue(target, lookup.findStatic(Reflector.class, "prepRet", MethodType.methodType(Object.class, Class.class, Object.class)).bindTo(targetType.returnType()));
+    for (int i = 0; i < targetType.parameterCount(); i++) {
+      target = MethodHandles.filterArguments(target, i, lookup.findStatic(Reflector.class, "boxArg", MethodType.methodType(Object.class, Class.class, Object.class)).bindTo(targetType.parameterType(i)));
+    }
+    MethodType checkClassMethodType = MethodType.methodType(Boolean.TYPE, Class.class, Object.class);
+    MethodHandle test = lookup.findStatic(CachedInstanceMethod.class, "checkClass", checkClassMethodType);
+    test = test.bindTo(receiver.getClass());
+    test = test.asType(test.type().changeParameterType(0, type().parameterType(0)));
+    
+    setTarget(MethodHandles.guardWithTest(test, target, getTarget()));
+    return target.bindTo(receiver).invokeWithArguments(args);
+  }
+  
+  public static boolean checkClass(Class<?> klass, Object target) {
+    return target.getClass() == klass;
+  }
+}
 
+static public CallSite bootstrapInstanceMethod(Lookup lookup, String name, MethodType mt) throws IllegalAccessException, NoSuchMethodException {
+  CachedInstanceMethod callSite = new CachedInstanceMethod(lookup, name, mt);
+  MethodType fallbackMt = MethodType.genericMethodType(0, true);
+  MethodHandle fallback = lookup.findVirtual(CachedInstanceMethod.class, "fallback", fallbackMt);
+  fallback = fallback.bindTo(callSite).asCollector(Object[].class, mt.parameterCount()).asType(mt);
+  callSite.setTarget(fallback);
+  return callSite;
+}
 }

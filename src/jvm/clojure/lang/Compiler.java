@@ -19,6 +19,8 @@ import clojure.asm.commons.GeneratorAdapter;
 import clojure.asm.commons.Method;
 
 import java.io.*;
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -1392,6 +1394,8 @@ static class InstanceMethodExpr extends MethodExpr{
 
 	final static Method invokeInstanceMethodMethod =
 			Method.getMethod("Object invokeInstanceMethod(Object,String,Object[])");
+  final static Method bootstrapInstanceMethod =
+      Method.getMethod("CallSite bootstrapInstanceMethod(Lookup,String,MethodType)");
 
 
 	public InstanceMethodExpr(String source, int line, int column, Symbol tag, Expr target, String methodName, IPersistentVector args)
@@ -1521,15 +1525,38 @@ static class InstanceMethodExpr extends MethodExpr{
 			}
 		else
 			{
-			target.emit(C.EXPRESSION, objx, gen);
-			gen.push(methodName);
-			emitArgsAsArray(args, objx, gen);
+		  target.emit(C.EXPRESSION, objx, gen);
+		  //gen.push(methodName);
+			//emitArgsAsArray(args, objx, gen);
+      Class[] argClasses = new Class[args.count()];
+      for (int i = 0; i < args.count(); i++) {
+        argClasses[i] = Object.class;
+      }
+			MethodExpr.emitTypedArgs(objx, gen, argClasses, args);
 			if(context == C.RETURN)
 				{
 				ObjMethod method = (ObjMethod) METHOD.deref();
 				method.emitClearLocals(gen);
 				}
-			gen.invokeStatic(REFLECTOR_TYPE, invokeInstanceMethodMethod);
+      Type[] argTypes = new Type[args.count() + 1];
+      for (int i = 0; i < args.count() + 1; i++) {
+        argTypes[i] = OBJECT_TYPE;
+      }
+			String desc = Type.getMethodDescriptor(OBJECT_TYPE, argTypes);
+			String bsmName = "bootstrapInstanceMethod";
+			java.lang.reflect.Method bsmMethod = null;
+  	  try {
+        bsmMethod = RT.class.getMethod(bsmName, Lookup.class, String.class, MethodType.class);
+      } catch (NoSuchMethodException e) {
+        Util.sneakyThrow(e);
+      } catch (SecurityException e) {
+        Util.sneakyThrow(e);
+      }
+			String bsmDesc = Type.getMethodDescriptor(bsmMethod);
+			Handle bsm = new Handle(Opcodes.H_INVOKESTATIC, "clojure/lang/RT", "bootstrapInstanceMethod", bsmDesc);
+			gen.invokeDynamic(methodName, desc, bsm);
+			//gen.returnValue();
+			//gen.invokeStatic(REFLECTOR_TYPE, invokeInstanceMethodMethod);
 			}
 		if(context == C.STATEMENT)
 			gen.pop();

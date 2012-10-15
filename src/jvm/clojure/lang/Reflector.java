@@ -22,10 +22,16 @@ import java.util.List;
 
 public class Reflector{
 
-public static Object invokeInstanceMethod(Object target, String methodName, Object[] args) {
+public static Method findInstanceMethod(Object target, String methodName, Object[] args) {
 	Class c = target.getClass();
 	List methods = getMethods(c, args.length, methodName, false);
-	return invokeMatchingMethod(methodName, methods, target, args);
+	return findMatchingMethod(methodName, methods, target, args);
+}
+
+public static Object invokeInstanceMethod(Object target, String methodName, Object[] args) {
+  Class c = target.getClass();
+  List methods = getMethods(c, args.length, methodName, false);
+  return invokeMatchingMethod(methodName, methods, target, args);
 }
 
 private static Throwable getCauseOrElse(Exception e) {
@@ -44,41 +50,49 @@ private static String noMethodReport(String methodName, Object target){
 	 return "No matching method found: " + methodName
 			+ (target==null?"":" for " + target.getClass());
 }
+
+static Method findMatchingMethod(String methodName, List methods, Object target, Object[] args) {
+  Method m = null;
+  Object[] boxedArgs = null;
+  if(methods.isEmpty())
+    {
+    throw new IllegalArgumentException(noMethodReport(methodName,target));
+    }
+  else if(methods.size() == 1)
+    {
+    m = (Method) methods.get(0);
+    boxedArgs = boxArgs(m.getParameterTypes(), args);
+    }
+  else //overloaded w/same arity
+    {
+    Method foundm = null;
+    for(Iterator i = methods.iterator(); i.hasNext();)
+      {
+      m = (Method) i.next();
+
+      Class[] params = m.getParameterTypes();
+      if(isCongruent(params, args))
+        {
+        if(foundm == null || Compiler.subsumes(params, foundm.getParameterTypes()))
+          {
+          foundm = m;
+          boxedArgs = boxArgs(params, args);
+          }
+        }
+      }
+    m = foundm;
+    }
+  return m;
+}
+
 static Object invokeMatchingMethod(String methodName, List methods, Object target, Object[] args)
 		{
-	Method m = null;
-	Object[] boxedArgs = null;
-	if(methods.isEmpty())
-		{
-		throw new IllegalArgumentException(noMethodReport(methodName,target));
-		}
-	else if(methods.size() == 1)
-		{
-		m = (Method) methods.get(0);
-		boxedArgs = boxArgs(m.getParameterTypes(), args);
-		}
-	else //overloaded w/same arity
-		{
-		Method foundm = null;
-		for(Iterator i = methods.iterator(); i.hasNext();)
-			{
-			m = (Method) i.next();
-
-			Class[] params = m.getParameterTypes();
-			if(isCongruent(params, args))
-				{
-				if(foundm == null || Compiler.subsumes(params, foundm.getParameterTypes()))
-					{
-					foundm = m;
-					boxedArgs = boxArgs(params, args);
-					}
-				}
-			}
-		m = foundm;
-		}
+  Method m = findMatchingMethod(methodName, methods, target, args);
 	if(m == null)
 		throw new IllegalArgumentException(noMethodReport(methodName,target));
 
+  Class[] params = m.getParameterTypes();
+  Object[] boxedArgs = boxArgs(params, args);
 	if(!Modifier.isPublic(m.getDeclaringClass().getModifiers()))
 		{
 		//public method of non-public class, try to find it in hierarchy
@@ -405,8 +419,7 @@ static public List getMethods(Class c, int arity, String name, boolean getStatic
 	return methods;
 }
 
-
-static Object boxArg(Class paramType, Object arg){
+public static Object boxArg(Class paramType, Object arg){
 	if(!paramType.isPrimitive())
 		return paramType.cast(arg);
 	else if(paramType == boolean.class)
