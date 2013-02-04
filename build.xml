@@ -86,7 +86,7 @@
     <javac srcdir="${jtestsrc}" destdir="${test-classes}" includeJavaRuntime="yes"
            debug="true" source="1.6" target="1.6" includeantruntime="no"/>
     <java classname="clojure.lang.Compile"
-          classpath="${test-classes}:${test}:${build}:${cljsrc}"
+          classpath="${maven.test.classpath}:${test-classes}:${test}:${build}:${cljsrc}"
           failonerror="true"
 	  fork="true">
       <sysproperty key="clojure.compile.path" value="${test-classes}"/>
