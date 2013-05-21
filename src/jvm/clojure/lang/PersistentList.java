@@ -305,7 +305,17 @@ public Object reduce(IFn f, Object start) {
 		throw new UnsupportedOperationException();
 	}
 
+  public char charAt(int index) {
+    throw new IndexOutOfBoundsException();
+  }
 
+  public int length() {
+    return count();
+  }
+
+  public CharSequence subSequence(int start, int end) {
+    return "";
+  }
 }
 
 }

@@ -253,4 +253,26 @@ public boolean addAll(int index, Collection c){
 synchronized public boolean isRealized(){
 	return fn == null;
 }
+
+public char charAt(int index) {
+  Object o = get(index);
+  if (o instanceof Character) return ((Character) o).charValue();
+  throw Util.sneakyThrow(new Exception("Cannot cast " + o + " to Character"));
+}
+
+public int length() {
+  return count();
+}
+
+public String subSequence(int start, int end) {
+  StringBuilder sb = new StringBuilder();
+  for (int i = start; i < end; i++) {
+      sb.append(charAt(i));
+  }
+  return sb.toString();
+}
+
+public String toString() {
+  return subSequence(0, count());
+}
 }

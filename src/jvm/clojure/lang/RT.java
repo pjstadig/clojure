@@ -544,7 +544,7 @@ static int countFrom(Object o){
 		}
 		return i;
 	}
-	else if(o instanceof CharSequence)
+	else if(o instanceof CharSequence && !(o instanceof Collection))
 		return ((CharSequence) o).length();
 	else if(o instanceof Collection)
 		return ((Collection) o).size();
@@ -767,7 +767,7 @@ static public Object nth(Object coll, int n){
 static Object nthFrom(Object coll, int n){
 	if(coll == null)
 		return null;
-	else if(coll instanceof CharSequence)
+	else if(coll instanceof CharSequence && !(coll instanceof Sequential))
 		return Character.valueOf(((CharSequence) coll).charAt(n));
 	else if(coll.getClass().isArray())
 		return Reflector.prepRet(coll.getClass().getComponentType(),Array.get(coll, n));
@@ -813,7 +813,7 @@ static Object nthFrom(Object coll, int n, Object notFound){
 	else if(n < 0)
 		return notFound;
 
-	else if(coll instanceof CharSequence) {
+	else if(coll instanceof CharSequence && !(coll instanceof Sequential)) {
 		CharSequence s = (CharSequence) coll;
 		if(n < s.length())
 			return Character.valueOf(s.charAt(n));
