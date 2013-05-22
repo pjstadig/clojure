@@ -10,6 +10,29 @@
 
 (set! *warn-on-reflection* true)
 
+(defprotocol ISeq
+  (first [this])
+  (more [this])
+  (next [this]))
+
+(extend-protocol ISeq
+  nil
+  (first [this] nil)
+  (more [this] nil)
+  (next [this] nil)
+  clojure.lang.ISeq
+  (first [this] (.first this))
+  (more [this] (.more this))
+  (next [this] (.next this))
+  clojure.lang.Seqable
+  (first [this] (first (.seq this)))
+  (more [this] (more (.seq this)))
+  (next [this] (next (.seq this)))
+  String
+  (first [this] (first (clojure.lang.StringSeq/create this)))
+  (more [this] (more (clojure.lang.StringSeq/create this)))
+  (next [this] (next (clojure.lang.StringSeq/create this))))
+
 (defprotocol CollReduce
   "Protocol for collection types that can implement reduce faster than
   first/next recursion. Called by clojure.core/reduce. Baseline

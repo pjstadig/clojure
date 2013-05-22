@@ -6156,6 +6156,16 @@
 (load "genclass")
 (load "core_deftype")
 (load "core/protocols")
+
+(defn first [s]
+  (clojure.core.protocols/first s))
+
+(defn rest [s]
+  (clojure.core.protocols/more s))
+
+(defn next [s]
+  (clojure.core.protocols/next s))
+
 (load "gvec")
 (load "instant")
 (load "uuid")

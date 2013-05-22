@@ -463,23 +463,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;; protocols ;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- expand-method-impl-cache [^clojure.lang.MethodImplCache cache c f]
-  (if (.map cache)
-    (let [cs (assoc (.map cache) c (clojure.lang.MethodImplCache$Entry. c f))]
-      (clojure.lang.MethodImplCache. (.protocol cache) (.methodk cache) cs))
-    (let [cs (into1 {} (remove (fn [[c e]] (nil? e)) (map vec (partition 2 (.table cache)))))
-          cs (assoc cs c (clojure.lang.MethodImplCache$Entry. c f))]
-      (if-let [[shift mask] (maybe-min-hash (map hash (keys cs)))]
-        (let [table (make-array Object (* 2 (inc mask)))
-              table (reduce1 (fn [^objects t [c e]]
-                               (let [i (* 2 (int (shift-mask shift mask (hash c))))]
-                                 (aset t i c)
-                                 (aset t (inc i) e)
-                                 t))
-                             table cs)]
-          (clojure.lang.MethodImplCache. (.protocol cache) (.methodk cache) shift mask table))
-        (clojure.lang.MethodImplCache. (.protocol cache) (.methodk cache) cs)))))
-
 (defn- super-chain [^Class c]
   (when c
     (cons c (super-chain (.getSuperclass c)))))
@@ -490,19 +473,226 @@
   ([^Class a ^Class b]
      (if (.isAssignableFrom a b) b a)))
 
-(defn find-protocol-impl [protocol x]
-  (if (instance? (:on-interface protocol) x)
-    x
-    (let [c (class x)
-          impl #(get (:impls protocol) %)]
-      (or (impl c)
-          (and c (or (first (remove nil? (map impl (butlast (super-chain c)))))
-                     (when-let [t (reduce1 pref (filter impl (disj (supers c) Object)))]
-                       (impl t))
-                     (impl Object)))))))
+(letfn [(first [s]
+          (when-let [s (seq s)]
+            (.first s)))
+        (next [s]
+          (when s
+            (.next s)))
+        (rest [s]
+          (when s
+            (.more s)))
+        (conj [s x]
+          (.cons s x))
+        (seq [s]
+          (when s
+            (if (.isArray (.getClass s))
+              (clojure.lang.ArraySeq/createFromObject s)
+              (.seq s))))
+        (every? [pred coll]
+          (cond
+           (nil? (seq coll)) true
+           (pred (first coll)) (recur pred (next coll))
+           :else false))
+        (spread [arglist]
+          (cond
+           (nil? arglist) nil
+           (nil? (next arglist)) (seq (first arglist))
+           :else (cons (first arglist) (spread (next arglist)))))
+        (apply
+          ([^clojure.lang.IFn f args]
+             (. f (applyTo (seq args))))
+          ([^clojure.lang.IFn f x args]
+             (. f (applyTo (list* x args))))
+          ([^clojure.lang.IFn f x y args]
+             (. f (applyTo (list* x y args))))
+          ([^clojure.lang.IFn f x y z args]
+             (. f (applyTo (list* x y z args))))
+          ([^clojure.lang.IFn f a b c d & args]
+             (. f (applyTo (cons a (cons b (cons c (cons d (spread args)))))))))
+        (list*
+          ([args] (seq args))
+          ([a args] (cons a args))
+          ([a b args] (cons a (cons b args)))
+          ([a b c args] (cons a (cons b (cons c args))))
+          ([a b c d & more]
+             (cons a (cons b (cons c (cons d (spread more)))))))
+        (map
+          ([f coll]
+             (when-let [s (seq coll)]
+               (cons (f (first s)) (map f (rest s)))))
+          ([f c1 c2]
+             (let [s1 (seq c1) s2 (seq c2)]
+               (when (and s1 s2)
+                 (cons (f (first s1) (first s2))
+                       (map f (rest s1) (rest s2))))))
+          ([f c1 c2 c3]
+             (let [s1 (seq c1) s2 (seq c2) s3 (seq c3)]
+               (when (and  s1 s2 s3)
+                 (cons (f (first s1) (first s2) (first s3))
+                       (map f (rest s1) (rest s2) (rest s3))))))
+          ([f c1 c2 c3 & colls]
+             (let [step (fn step [cs]
+                          (let [ss (map seq cs)]
+                            (when (every? identity ss)
+                              (cons (map first ss) (step (map rest ss))))))]
+               (map #(apply f %) (step (conj colls c3 c2 c1))))))
+        (range
+          ([] (range 0 Double/POSITIVE_INFINITY 1))
+          ([end] (range 0 end 1))
+          ([start end] (range start end 1))
+          ([start end step]
+             (lazy-seq
+              (let [comp (if (pos? step) < >)]
+                (when (comp start end)
+                  (cons start (range (+ start step) end step)))))))
+        (maybe-min-hash [hashes]
+          (first
+           (filter (fn [[s m]]
+                     (apply distinct? (map #(shift-mask s m %) hashes)))
+                   (apply concat (map (fn [mask]
+                                        (map (fn [shift]
+                                               [shift mask])
+                                             (range 0 31)))
+                                      (map #(dec (bit-shift-left 1 %))
+                                           (range 1 (inc max-mask-bits))))))))
+        (concat
+          ([] (lazy-seq nil))
+          ([x] (lazy-seq x))
+          ([x y]
+             (lazy-seq
+              (let [s (seq x)]
+                (if s
+                  (cons (first s) (concat (rest s) y))
+                  y))))
+          ([x y & zs]
+             (let [cat (fn cat [xys zs]
+                         (lazy-seq
+                          (let [xys (seq xys)]
+                            (if xys
+                              (cons (first xys) (cat (rest xys) zs))
+                              (when zs
+                                (cat (first zs) (next zs)))))))]
+               (cat (concat x y) zs))))
+        (remove [pred coll]
+          (filter (complement pred) coll))
+        (filter [pred coll]
+          (when-let [s (seq coll)]
+            (let [f (first s) r (rest s)]
+              (if (pred f)
+                (cons f (filter pred r))
+                (filter pred r)))))
+        (partition
+          ([n coll]
+             (partition n n coll))
+          ([n step coll]
+             (lazy-seq
+              (when-let [s (seq coll)]
+                (let [p (doall (take n s))]
+                  (when (= n (count p))
+                    (cons p (partition n step (nthrest s step))))))))
+          ([n step pad coll]
+             (lazy-seq
+              (when-let [s (seq coll)]
+                (let [p (doall (take n s))]
+                  (if (= n (count p))
+                    (cons p (partition n step pad (nthrest s step)))
+                    (list (take n (concat p pad)))))))))
+        (doall
+          ([coll]
+             (dorun coll)
+             coll)
+          ([n coll]
+             (dorun n coll)
+             coll))
+        (dorun
+          ([coll]
+             (when (seq coll)
+               (recur (next coll))))
+          ([n coll]
+             (when (and (seq coll) (pos? n))
+               (recur (dec n) (next coll)))))
+        (butlast [s]
+          (loop [ret [] s s]
+            (if (next s)
+              (recur (conj ret (first s)) (next s))
+              (seq ret))))
+        (supers [class]
+          (loop [ret (set (bases class)) cs ret]
+            (if (seq cs)
+              (let [c (first cs) bs (bases c)]
+                (recur (into1 ret bs) (into1 (disj cs c) bs)))
+              (not-empty ret))))
+        (into1 [to from]
+          (reduce1 conj to from))
+        (reduce1
+          ([f coll]
+             (let [s (seq coll)]
+               (if s
+                 (reduce1 f (first s) (next s))
+                 (f))))
+          ([f val coll]
+             (let [s (seq coll)]
+               (if s
+                 (recur f (f val (first s)) (next s))
+                 val))))
+        (distinct?
+          ([x] true)
+          ([x y] (not (= x y)))
+          ([x y & more]
+             (if (not= x y)
+               (loop [s #{x y} xs more]
+                 (let [x (first xs)
+                       etc (next xs)]
+                   (if xs
+                     (if (contains? s x)
+                       false
+                       (recur (conj s x) etc))
+                     true)))
+               false)))]
+  (defn- expand-method-impl-cache [^clojure.lang.MethodImplCache cache c f]
+    (if (.map cache)
+      (let [cs (assoc (.map cache) c (clojure.lang.MethodImplCache$Entry. c f))]
+        (clojure.lang.MethodImplCache. (.protocol cache) (.methodk cache) cs))
+      (let [table (.table cache)
+            cs (into1 {} (remove (fn [[c e]] (nil? e)) (map vec (partition 2 (.table cache)))))
+            cs (assoc cs c (clojure.lang.MethodImplCache$Entry. c f))]
+        (if-let [[shift mask] (maybe-min-hash (map hash (keys cs)))]
+          (let [table (make-array Object (* 2 (inc mask)))
+                table (reduce1 (fn [^objects t [c e]]
+                                 (let [i (* 2 (int (shift-mask shift mask (hash c))))]
+                                   (aset t i c)
+                                   (aset t (inc i) e)
+                                   t))
+                               table cs)]
+            (clojure.lang.MethodImplCache. (.protocol cache) (.methodk cache) shift mask table))
+          (clojure.lang.MethodImplCache. (.protocol cache) (.methodk cache) cs)))))
 
-(defn find-protocol-method [protocol methodk x]
-  (get (find-protocol-impl protocol x) methodk))
+  (defn find-protocol-impl [protocol x]
+    (if (instance? (:on-interface protocol) x)
+      x
+      (let [c (class x)
+            impl #(get (:impls protocol) %)]
+        (or (impl c)
+            (and c (or (first (remove nil? (map impl (butlast (super-chain c)))))
+                       (when-let [t (reduce1 pref (filter impl (disj (supers c) Object)))]
+                         (impl t))
+                       (impl Object)))))))
+
+  (defn find-protocol-method [protocol methodk x]
+    (get (find-protocol-impl protocol x) methodk))
+
+  (defn -cache-protocol-fn [^clojure.lang.AFunction pf x ^Class c ^clojure.lang.IFn interf]
+    (let [cache  (.__methodImplCache pf)
+          f (if (.isInstance c x)
+              interf 
+              (find-protocol-method (.protocol cache) (.methodk cache) x))]
+      (when-not f
+        (throw (IllegalArgumentException. (str "No implementation of method: " (.methodk cache) 
+                                               " of protocol: " (:var (.protocol cache)) 
+                                               " found for class: " (if (nil? x) "nil" (.getName (class x)))))))
+      (set! (.__methodImplCache pf) (expand-method-impl-cache cache (class x) f))
+      f)))
 
 (defn- protocol?
   [maybe-p]
@@ -529,18 +719,6 @@
   {:added "1.2"}
   [protocol x]
   (boolean (find-protocol-impl protocol x)))
-
-(defn -cache-protocol-fn [^clojure.lang.AFunction pf x ^Class c ^clojure.lang.IFn interf]
-  (let [cache  (.__methodImplCache pf)
-        f (if (.isInstance c x)
-            interf 
-            (find-protocol-method (.protocol cache) (.methodk cache) x))]
-    (when-not f
-      (throw (IllegalArgumentException. (str "No implementation of method: " (.methodk cache) 
-                                             " of protocol: " (:var (.protocol cache)) 
-                                             " found for class: " (if (nil? x) "nil" (.getName (class x)))))))
-    (set! (.__methodImplCache pf) (expand-method-impl-cache cache (class x) f))
-    f))
 
 (defn- emit-method-builder [on-interface method on-method arglists]
   (let [methodk (keyword method)

@@ -31,7 +31,7 @@ static public ArraySeq create(Object... array){
 	return new ArraySeq(array, 0);
 }
 
-static ISeq createFromObject(Object array){
+public static ISeq createFromObject(Object array){
 	if(array == null || Array.getLength(array) == 0)
 		return null;
 	Class aclass = array.getClass();
