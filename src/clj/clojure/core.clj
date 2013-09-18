@@ -1548,22 +1548,31 @@
   list already. If there are more forms, inserts the first form as the
   second item in second form, etc."
   {:added "1.0"}
-  ([x] x)
-  ([x form] (if (seq? form)
-              (with-meta `(~(first form) ~x ~@(next form)) (meta form))
-              (list form x)))
-  ([x form & more] `(-> (-> ~x ~form) ~@more)))
+  [x & forms]
+  (loop [x x, forms forms]
+    (if forms
+      (let [form (first forms)
+            threaded (if (seq? form)
+                       (with-meta `(~(first form) ~x ~@(next form)) (meta form))
+                       (list form x))]
+        (recur threaded (next forms)))
+      x)))
 
 (defmacro ->>
   "Threads the expr through the forms. Inserts x as the
   last item in the first form, making a list of it if it is not a
   list already. If there are more forms, inserts the first form as the
   last item in second form, etc."
-  {:added "1.1"} 
-  ([x form] (if (seq? form)
+  {:added "1.1"}
+  [x & forms]
+  (loop [x x, forms forms]
+    (if forms
+      (let [form (first forms)
+            threaded (if (seq? form)
               (with-meta `(~(first form) ~@(next form)  ~x) (meta form))
-              (list form x)))
-  ([x form & more] `(->> (->> ~x ~form) ~@more)))
+              (list form x))]
+        (recur threaded (next forms)))
+      x)))
 
 (def map)
 
@@ -2650,10 +2659,11 @@
    :static true}
   [f x] (cons x (lazy-seq (iterate f (f x)))))
 
-(defn range 
+(defn range
   "Returns a lazy seq of nums from start (inclusive) to end
-  (exclusive), by step, where start defaults to 0, step to 1, and end
-  to infinity."
+  (exclusive), by step, where start defaults to 0, step to 1, and end to
+  infinity. When step is equal to 0, returns an infinite sequence of
+  start. When start is equal to end, returns empty list."
   {:added "1.0"
    :static true}
   ([] (range 0 Double/POSITIVE_INFINITY 1))
@@ -2662,7 +2672,9 @@
   ([start end step]
    (lazy-seq
     (let [b (chunk-buffer 32)
-          comp (if (pos? step) < >)]
+          comp (cond (or (zero? step) (= start end)) not=
+                     (pos? step) <
+                     (neg? step) >)]
       (loop [i start]
         (if (and (< (count b) 32)
                  (comp i end))
@@ -3275,6 +3287,7 @@
        (instance? clojure.lang.BigInt x) x
        (instance? BigInteger x) (clojure.lang.BigInt/fromBigInteger x)
        (decimal? x) (bigint (.toBigInteger ^BigDecimal x))
+       (float? x)  (bigint (. BigDecimal valueOf (double x)))
        (ratio? x) (bigint (.bigIntegerValue ^clojure.lang.Ratio x))
        (number? x) (clojure.lang.BigInt/valueOf (long x))
        :else (bigint (BigInteger. x))))
@@ -3288,6 +3301,7 @@
        (instance? BigInteger x) x
        (instance? clojure.lang.BigInt x) (.toBigInteger ^clojure.lang.BigInt x)
        (decimal? x) (.toBigInteger ^BigDecimal x)
+       (float? x) (.toBigInteger (. BigDecimal valueOf (double x)))
        (ratio? x) (.bigIntegerValue ^clojure.lang.Ratio x)
        (number? x) (BigInteger/valueOf (long x))
        :else (BigInteger. x)))
@@ -3896,6 +3910,8 @@
   "Returns a lazy seq of the first item in each coll, then the second etc."
   {:added "1.0"
    :static true}
+  ([] ())
+  ([c1] (lazy-seq c1))
   ([c1 c2]
      (lazy-seq
       (let [s1 (seq c1) s2 (seq c2)]
@@ -5207,7 +5223,7 @@
   supported. The :gen-class directive is ignored when not
   compiling. If :gen-class is not supplied, when compiled only an
   nsname__init.class will be generated. If :refer-clojure is not used, a
-  default (refer 'clojure) is used.  Use of ns is preferred to
+  default (refer 'clojure.core) is used.  Use of ns is preferred to
   individual calls to in-ns/require/use/import:
 
   (ns foo.bar
@@ -5790,7 +5806,7 @@
 (add-doc-and-meta *file*
   "The path of the file being evaluated, as a String.
 
-  Evaluates to nil when there is no file, eg. in the REPL."
+  When there is no file, e.g. in the REPL, the value is not defined."
   {:added "1.0"})
 
 (add-doc-and-meta *command-line-args*
@@ -6275,7 +6291,7 @@
   ([f & opts]
      (let [opts (normalize-slurp-opts opts)
            sb (StringBuilder.)]
-       (with-open [#^java.io.Reader r (apply jio/reader f opts)]
+       (with-open [^java.io.Reader r (apply jio/reader f opts)]
          (loop [c (.read r)]
            (if (neg? c)
              (str sb)
@@ -6288,7 +6304,7 @@
   closes f. Options passed to clojure.java.io/writer."
   {:added "1.2"}
   [f content & options]
-  (with-open [#^java.io.Writer w (apply jio/writer f options)]
+  (with-open [^java.io.Writer w (apply jio/writer f options)]
     (.write w (str content))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; futures (needs proxy);;;;;;;;;;;;;;;;;;
