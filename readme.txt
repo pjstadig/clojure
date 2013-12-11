@@ -1,3 +1,38 @@
+This is an experiment to add invokedynamic support to Clojure.  The first
+challenges were to upgrade the re-rooted ASM in Clojure to 4.0, and get Clojure
+to generate V1.7 classfiles.  (I'm writing this in retrospect one year later, so
+it may not be entirely accurate in all its details.)
+
+Upgrading ASM was fairly simple, however, there were some changes that had to be
+resolved.  For one, the ASM library changed from an interface based hierarchy to
+a class inheritance based hierarchy.
+
+Getting Clojure to generate v1.7 classfiles meant that the Clojure compiler was
+now required to generate stackmaps.  ASM handles this for you automatically,
+however there was an issue with the way it generated stackmaps that was causing
+invalid classfiles.  The issue was resolved by extending the ASM ClassWriter's
+getCommonSuperClass method to always return java.lang.Object (since Clojure is a
+dynamic language that is about all we know at compile time).
+
+Once those difficulties had been overcome it was time to attempt actually using
+invokedynamic.  I chose to try something simple first.  I decided to try to
+cache reflection information at callsites so that you would only have to pay the
+cost of reflection once for the runtime of your application.
+
+I was able to get something working, however, I believe that it is broken.  What
+I implemented are monomorphic callsites, so for any use of reflection that is
+polymorphic without any common super class or interface (there are is at least
+one instance in the Clojure code base) I don't believe my callsites would work.
+This would be an instance where you are calling a method that has the same name
+on two different classes, but there is no common superclass through which you
+can call that method on both of your targets.  Anyway, I don't know if this is a
+practical concern; I'm just telling you.
+
+Places to go next could be keyword callsites, protocol call sites, switchpoint
+based vars, etc.
+
+--------------------------------------------------------------------------
+
  *   Clojure
  *   Copyright (c) Rich Hickey. All rights reserved.
  *   The use and distribution terms for this software are covered by the
