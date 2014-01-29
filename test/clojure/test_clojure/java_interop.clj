@@ -308,7 +308,7 @@
 
 (test-to-passed-array-for vector)
 (test-to-passed-array-for list)
-(test-to-passed-array-for hash-set)
+;;(test-to-passed-array-for hash-set)
 (test-to-passed-array-for queue)
 
 (deftest test-into-array
@@ -451,8 +451,12 @@
       (double-array [1 2 3])
       (boolean-array [true false])
       (byte-array [(byte 1) (byte 2)])
+      (byte-array [1 2])
+      (byte-array 2 [1 2])
       (char-array [\a \b \c])
       (short-array [(short 1) (short 2)])
+      (short-array [1 2])
+      (short-array 2 [1 2])
       (make-array Integer/TYPE 3)
       (to-array [1 "a" :k])
       (into-array [1 2 3]) )
