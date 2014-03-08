@@ -152,6 +152,21 @@
              (exception))
        ))
 
+(deftest test-if-some
+  (are [x y] (= x y)
+       1 (if-some [a 1] a)
+       false (if-some [a false] a)
+       nil (if-some [a nil] (exception))
+       3 (if-some [[a b] [1 2]] (+ a b))
+       1 (if-some [[a b] nil] b 1)
+       1 (if-some [a nil] (exception) 1)))
+
+(deftest test-when-some
+  (are [x y] (= x y)
+       1 (when-some [a 1] a)
+       2 (when-some [[a b] [1 2]] b)
+       false (when-some [a false] a)
+       nil (when-some [a nil] (exception))))
 
 (deftest test-cond
   (are [x y] (= x y)
@@ -366,9 +381,9 @@
           ^Object y (Long. -1)]
       (is (= :diff (case x -1 :oops :diff)))
       (is (= :same (case y -1 :same :oops)))))
-  ;;FIXME - these are no longer collisions
-  #_(testing "test correct behavior on hash collision"
-    (is (== (hash 1) (hash 9223372039002259457N)))
+  (testing "test correct behavior on hash collision"
+    ;; case uses Java .hashCode to put values into hash buckets.
+    (is (== (.hashCode 1) (.hashCode 9223372039002259457N)))
     (are [result input] (= result (case input
                                     1 :long
                                     9223372039002259457N :big
