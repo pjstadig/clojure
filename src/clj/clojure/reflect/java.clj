@@ -11,7 +11,7 @@
 
 (require '[clojure.set :as set]
          '[clojure.string :as str])
-(import '[clojure.asm ClassReader ClassVisitor Opcodes Type]
+(import '[clojure.asm ClassReader ClassVisitor Type Opcodes]
          '[java.lang.reflect Modifier]
          java.io.InputStream)
 
@@ -202,7 +202,9 @@ the kinds of objects to which they can apply."}
             result (atom {:bases #{} :flags #{} :members #{}})]
         (.accept
          r
-         (proxy [ClassVisitor] [Opcodes/ASM4]
+         (proxy
+          [ClassVisitor]
+          [Opcodes/ASM4]
           (visit [version access name signature superName interfaces]
                  (let [flags (parse-flags access :class)
                        ;; ignore java.lang.Object on interfaces to match reflection
@@ -218,6 +220,7 @@ the kinds of objects to which they can apply."}
                                   (not-empty))]
                    (swap! result merge {:bases bases 
                                         :flags flags})))
+          (visitAnnotation [desc visible])
           (visitSource [name debug])
           (visitInnerClass [name outerName innerName access])
           (visitField [access name desc signature value]
