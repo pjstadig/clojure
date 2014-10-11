@@ -314,7 +314,9 @@ public Object reduce(IFn f, Object start) {
 		throw new UnsupportedOperationException();
 	}
 
-
+    public String toString() {
+    	return "()";
+    }
 }
 
 }
