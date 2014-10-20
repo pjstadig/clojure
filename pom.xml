@@ -26,11 +26,13 @@
     </license>
   </licenses>
 
-  <parent>
-    <groupId>org.sonatype.oss</groupId>
-    <artifactId>oss-parent</artifactId>
-    <version>7</version>
-  </parent>
+  <distributionManagement>
+    <repository>
+      <id>clojars</id>
+      <name>Clojars repository</name>
+      <url>https://clojars.org/repo</url>
+    </repository>
+  </distributionManagement>
 
   <scm>
     <connection>scm:git:git@github.com:pjstadig/clojure.git</connection>
