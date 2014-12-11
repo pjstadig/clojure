@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+  <classpathentry kind="src" path="test/java" output="target/test-classes" including="**/*.java"/>
+  <classpathentry kind="src" path="src/jvm" including="**/*.java"/>
+  <classpathentry kind="src" path="src/resources" excluding="**/*.java"/>
+  <classpathentry kind="src" path="src/clj" excluding="**/*.java"/>
+  <classpathentry kind="output" path="target/classes"/>
+  <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/J2SE-1.5"/>
+  <classpathentry kind="var" path="M2_REPO/name/stadig/clojure-lang/0.1.0-SNAPSHOT/clojure-lang-0.1.0-SNAPSHOT.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/codehaus/jsr166-mirror/jsr166y/1.7.0/jsr166y-1.7.0.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/clojure/test.generative/0.2.0/test.generative-0.2.0.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/clojure/tools.namespace/0.1.1/tools.namespace-0.1.1.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/clojure/java.classpath/0.1.1/java.classpath-0.1.1.jar"/>
+</classpath>
