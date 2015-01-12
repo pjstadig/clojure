@@ -10,7 +10,7 @@ Transducers is a new way to decouple algorithmic transformations from their
 application in different contexts. Transducers are functions that transform
 reducing functions to build up a "recipe" for transformation.
 
-Also see: http://blog.cognitect.com/blog/2014/8/6/transducers-are-coming
+Also see: http://clojure.org/transducers
 
 Many existing sequence functions now have a new arity (one fewer argument
 than before). This arity will return a transducer that represents the same
@@ -32,6 +32,9 @@ logic but is independent of lazy sequence processing. Functions included are:
 * partition-all
 * keep
 * keep-indexed
+* map-indexed
+* distinct
+* interpose
 
 Additionally some new transducer functions have been added:
 
@@ -48,7 +51,7 @@ transducers in different ways:
 
 * sequence - takes a transformation and a coll and produces a lazy seq
 * transduce - reduce with a transformation (eager)
-* iteration - returns an iterable/seqable/reducible seq of applications of the transducer to items in coll. Applications are re-performed with every iterator/seq/reduce.
+* eduction - returns a reducible/seqable/iterable seq of applications of the transducer to items in coll. Applications are re-performed with every reduce/seq/iterator.
 * run! - run the transformation for side effects on the collection
 
 There have been a number of internal changes to support transducers:
@@ -56,9 +59,16 @@ There have been a number of internal changes to support transducers:
 * volatiles - there are a new set of functions (volatile!, vswap!, vreset!, volatile?) to create and use volatile "boxes" to hold state in stateful transducers. Volatiles are faster than atoms but give up atomicity guarantees so should only be used with thread isolation.
 * array iterators - added support for iterators over arrays
 
-Some issues created and addressed during development:
+Some related issues addressed during development:
 * [CLJ-1511](http://dev.clojure.org/jira/browse/CLJ-1511)
 * [CLJ-1497](http://dev.clojure.org/jira/browse/CLJ-1497)
+* [CLJ-1549](http://dev.clojure.org/jira/browse/CLJ-1549)
+* [CLJ-1537](http://dev.clojure.org/jira/browse/CLJ-1537)
+* [CLJ-1554](http://dev.clojure.org/jira/browse/CLJ-1554)
+* [CLJ-1601](http://dev.clojure.org/jira/browse/CLJ-1601)
+* [CLJ-1606](http://dev.clojure.org/jira/browse/CLJ-1606)
+* [CLJ-1621](http://dev.clojure.org/jira/browse/CLJ-1621)
+* [CLJ-1600](http://dev.clojure.org/jira/browse/CLJ-1600)
 
 ### 1.2 Keyword and Symbol Construction
 
@@ -76,13 +86,14 @@ to only clear the cache reference queue when there is a cache miss.
 
 One source of performance issues is the (unintended) use of arithmetic operations on
 boxed numbers. To make detecting the presence of boxed math easier, a warning will now
-be emitted about boxed math if \*unchecked-math* is enabled.
+be emitted about boxed math if \*unchecked-math* is set to :warn-on-boxed (any truthy
+value will enable unchecked-math, only this specific value enables the warning).
 
 Example use:
 
     user> (defn plus-2 [x] (+ x 2))  ;; no warning, but boxed
 	#'user/plus-2
-    user> (set! *unchecked-math* true)
+    user> (set! *unchecked-math* :warn-on-boxed)
 	true
     user> (defn plus-2 [x] (+ x 2)) ;; now we see a warning
     Boxed math warning, NO_SOURCE_PATH:10:18 - call: public static java.lang.Number
@@ -92,6 +103,7 @@ Example use:
 	#'user/plus-2
 
 * [CLJ-1325](http://dev.clojure.org/jira/browse/CLJ-1325)
+* [CLJ-1535](http://dev.clojure.org/jira/browse/CLJ-1535)
 
 ### 1.4 update - like update-in for first level
 
@@ -118,10 +130,23 @@ Example use:
   Invalid defrecord results in exception attributed to consuming ns instead of defrecord ns
 * [CLJ-1169](http://dev.clojure.org/jira/browse/CLJ-1169)
   Report line,column, and source in defmacro errors
+* [CLJ-1297](http://dev.clojure.org/jira/browse/CLJ-1297)
+  Give more specific hint if namespace with "-" not found to check file uses "_"
 
 ### 2.2 Documentation strings
 
-No changes.
+* [CLJ-1417](http://dev.clojure.org/jira/browse/CLJ-1417)
+  clojure.java.io/input-stream has incorrect docstring
+* [CLJ-1357](http://dev.clojure.org/jira/browse/CLJ-1357)
+  Fix typo in gen-class doc-string
+* [CLJ-1479](http://dev.clojure.org/jira/browse/CLJ-1479)
+  Fix typo in filterv example
+* [CLJ-1480](http://dev.clojure.org/jira/browse/CLJ-1480)
+  Fix typo in defmulti docstring
+* [CLJ-1477](http://dev.clojure.org/jira/browse/CLJ-1477)
+  Fix typo in deftype docstring
+* [CLJ-1478](http://dev.clojure.org/jira/browse/CLJ-1378)
+  Fix typo in clojure.main usage
 
 ### 2.3 Performance
 
@@ -131,6 +156,12 @@ No changes.
   clojure.core/set should use transients for better performance
 * [CLJ-1429](http://dev.clojure.org/jira/browse/CLJ-1429)
   Cache unknown multimethod value default dispatch
+* [CLJ-1529](http://dev.clojure.org/jira/browse/CLJ-1529)
+  Reduce compile times by avoiding unnecessary calls to Class.forName()
+* [CLJ-1546](http://dev.clojure.org/jira/browse/CLJ-1546)
+  vec is now faster on almost all inputs
+* [CLJ-1618](http://dev.clojure.org/jira/browse/CLJ-1618)
+  set is now faster on almost all inputs
 
 ### 2.4 Other enhancements
 
@@ -140,6 +171,20 @@ No changes.
   Hints don't work with #() form of function
 * [CLJ-1498](http://dev.clojure.org/jira/browse/CLJ-1498)
   Removes owner-thread check from transients - this check was preventing some valid usage of transients in core.async where a transient is created on one thread and then used again in another pooled thread (while still maintaining thread isolation).
+* [CLJ-803](http://dev.clojure.org/jira/browse/CLJ-803)
+  Extracted IAtom interface implemented by Atom.
+* [CLJ-1315](http://dev.clojure.org/jira/browse/CLJ-1315)
+  Don't initialize classes when importing them
+* [CLJ-1330](http://dev.clojure.org/jira/browse/CLJ-1330)
+  Class name clash between top-level functions and defn'ed ones
+* [CLJ-1349](http://dev.clojure.org/jira/browse/CLJ-1349)
+  Update to latest test.generative and add dependency on test.check
+* [CLJ-1546](http://dev.clojure.org/jira/browse/CLJ-1546)
+  vec now works with things that only implement Iterable or IReduceInit
+* [CLJ-1618](http://dev.clojure.org/jira/browse/CLJ-1618)
+  set now works with things that only implement Iterable or IReduceInit
+* [CLJ-1633](http://dev.clojure.org/jira/browse/CLJ-1633)
+  PersistentList/creator doesn't handle ArraySeqs correctly
 
 ## 3 Bug Fixes
 
@@ -161,6 +206,26 @@ No changes.
   Piping seque into seque can deadlock
 * [CLJ-738](http://dev.clojure.org/jira/browse/CLJ-738)
   <= is incorrect when args include Double/NaN
+* [CLJ-1408](http://dev.clojure.org/jira/browse/CLJ-1408)
+  Make cached string value of Keyword and Symbol transient
+* [CLJ-1466](http://dev.clojure.org/jira/browse/CLJ-1466)
+  clojure.core/bean should implement Iterable
+* [CLJ-1578](http://dev.clojure.org/jira/browse/CLJ-1578)
+  Make refer of Clojure core function not throw exception on reload
+* [CLJ-1501](http://dev.clojure.org/jira/browse/CLJ-1501)
+  LazySeq equals() should not use equiv() logic
+* [CLJ-1572](http://dev.clojure.org/jira/browse/CLJ-1572)
+  into (and other fns that rely on reduce) require only IReduceInit
+* [CLJ-1619](http://dev.clojure.org/jira/browse/CLJ-1619)
+  PersistentVector now directly implements reduce without init
+* [CLJ-1580](http://dev.clojure.org/jira/browse/CLJ-1580)
+  Transient collections should guarantee thread visibility
+* [CLJ-1590](http://dev.clojure.org/jira/browse/CLJ-1590)
+  Some IReduce/IReduceInit implementors don't respect reduced
+* [CLJ-979](http://dev.clojure.org/jira/browse/CLJ-979)
+  Clojure resolves to wrong deftype classes when AOT compiling or reloading
+* [CLJ-1544](http://dev.clojure.org/jira/browse/CLJ-1544)
+  AOT bug involving namespaces loaded before AOT compilation started
 
 # Changes to Clojure in Version 1.6
 

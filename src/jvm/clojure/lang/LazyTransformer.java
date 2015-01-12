@@ -15,6 +15,8 @@ package clojure.lang;
 import java.util.*;
 
 public final class LazyTransformer extends Obj implements ISeq, Sequential, List, IPending, IHashEq{
+transient int _hash = -1;
+transient int _hasheq = -1;
 
 IStepper stepper;
 Object first = null;
@@ -95,8 +97,7 @@ static class Stepper implements IStepper{
 	IFn xform;
 	static IFn stepfn = new AFn(){
 		public Object invoke(Object result){
-			LazyTransformer lt = (LazyTransformer) (RT.isReduced(result)?
-			                                        ((Reduced)result).deref():result);
+			LazyTransformer lt = (LazyTransformer) result;
 			lt.stepper = null;
 			return result;
 			}
@@ -116,11 +117,15 @@ static class Stepper implements IStepper{
 
 	public void step(LazyTransformer lt){
 		while(lt.stepper != null && iter.hasNext()){
-			if(RT.isReduced(xform.invoke(lt, iter.next())))
-				{
-				if(lt.rest != null)
-					lt.rest.stepper = null;
-				break;
+			if(RT.isReduced(xform.invoke(lt, iter.next()))){
+				lt.stepper = null;
+				LazyTransformer et = lt;
+				while(et.rest != null){
+					et = et.rest;
+					et.stepper = null;
+					}
+				xform.invoke(et);
+				return;
 				}
 			}
 		if(lt.stepper != null)
@@ -134,8 +139,7 @@ static class MultiStepper implements IStepper{
 	IFn xform;
 	static IFn stepfn = new AFn(){
 		public Object invoke(Object result){
-			LazyTransformer lt = (LazyTransformer) (RT.isReduced(result)?
-			                                        ((Reduced)result).deref():result);
+			LazyTransformer lt = (LazyTransformer)result;
 			lt.stepper = null;
 			return lt;
 			}
@@ -171,9 +175,14 @@ static class MultiStepper implements IStepper{
 		while(lt.stepper != null && hasNext()){
 			if(RT.isReduced(xform.applyTo(RT.cons(lt, next()))))
 				{
-				if(lt.rest != null)
-					lt.rest.stepper = null;
-				break;
+				lt.stepper = null;
+				LazyTransformer et = lt;
+				while(et.rest != null){
+					et = et.rest;
+					et.stepper = null;
+					}
+				xform.invoke(et);
+				return;
 				}
 			}
 		if(lt.stepper != null)
@@ -203,14 +212,24 @@ public boolean equiv(Object o){
 	return ms == null;}
 
 public int hashCode(){
-	ISeq s = seq();
-	if(s == null)
-		return 1;
-	return Util.hash(seq());
+	if(_hash == -1)
+		{
+		int hash = 1;
+		for(ISeq s = seq(); s != null; s = s.next())
+			{
+			hash = 31 * hash + (s.first() == null ? 0 : s.first().hashCode());
+			}
+		this._hash = hash;
+		}
+	return _hash;
 }
 
 public int hasheq(){
-	return Murmur3.hashOrdered(this);
+	if(_hasheq == -1)
+		{
+		_hasheq  = Murmur3.hashOrdered(this);
+		}
+	return _hasheq;
 }
 
 public boolean equals(Object o){

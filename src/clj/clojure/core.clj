@@ -352,9 +352,9 @@
   {:added "1.0"
    :static true}
   ([coll]
-   (if (instance? java.util.Collection coll)
-     (clojure.lang.LazilyPersistentVector/create coll)
-     (. clojure.lang.LazilyPersistentVector (createOwning (to-array coll))))))
+   (if (vector? coll)
+     (with-meta coll nil)
+     (clojure.lang.LazilyPersistentVector/create coll))))
 
 (defn hash-map
   "keyval => key val
@@ -3926,11 +3926,22 @@
                 (clojure.lang.LineNumberingPushbackReader.))]
     (load-reader rdr)))
 
+(defn set?
+  "Returns true if x implements IPersistentSet"
+  {:added "1.0"
+   :static true}
+  [x] (instance? clojure.lang.IPersistentSet x))
+
 (defn set
   "Returns a set of the distinct elements of coll."
   {:added "1.0"
    :static true}
-  [coll] (clojure.lang.PersistentHashSet/create (seq coll)))
+  [coll]
+  (if (set? coll)
+    (with-meta coll nil)
+    (if (instance? clojure.lang.IReduceInit coll)
+      (persistent! (.reduce ^clojure.lang.IReduceInit coll conj! (transient #{})))
+      (persistent! (reduce1 conj! (transient #{}) coll)))))
 
 (defn ^{:private true
    :static true}
@@ -4772,19 +4783,31 @@
    (reduce1 #(min-key k %1 %2) (min-key k x y) more)))
 
 (defn distinct
-  "Returns a lazy sequence of the elements of coll with duplicates removed"
+  "Returns a lazy sequence of the elements of coll with duplicates removed.
+  Returns a stateful transducer when no collection is provided."
   {:added "1.0"
    :static true}
-  [coll]
-    (let [step (fn step [xs seen]
-                   (lazy-seq
-                    ((fn [[f :as xs] seen]
-                      (when-let [s (seq xs)]
-                        (if (contains? seen f) 
-                          (recur (rest s) seen)
-                          (cons f (step (rest s) (conj seen f))))))
-                     xs seen)))]
-      (step coll #{})))
+  ([]
+   (fn [rf]
+     (let [seen (volatile! #{})]
+       (fn
+         ([] (rf))
+         ([result] (rf result))
+         ([result input]
+          (if (contains? @seen input)
+            result
+            (do (vswap! seen conj input)
+                (rf result input))))))))
+  ([coll]
+   (let [step (fn step [xs seen]
+                (lazy-seq
+                  ((fn [[f :as xs] seen]
+                     (when-let [s (seq xs)]
+                       (if (contains? seen f)
+                         (recur (rest s) seen)
+                         (cons f (step (rest s) (conj seen f))))))
+                   xs seen)))]
+     (step coll #{}))))
 
 
 
@@ -4937,10 +4960,27 @@
   [coll] (clojure.lang.Murmur3/hashUnordered coll))
 
 (defn interpose
-  "Returns a lazy seq of the elements of coll separated by sep"
+  "Returns a lazy seq of the elements of coll separated by sep.
+  Returns a stateful transducer when no collection is provided."
   {:added "1.0"
    :static true}
-  [sep coll] (drop 1 (interleave (repeat sep) coll)))
+  ([sep]
+   (fn [rf]
+     (let [started (volatile! false)]
+       (fn
+         ([] (rf))
+         ([result] (rf result))
+         ([result input]
+          (if @started
+            (let [sepr (rf result sep)]
+              (if (reduced? sepr)
+                sepr
+                (rf sepr input)))
+            (do
+              (vreset! started true)
+              (rf result input))))))))
+  ([sep coll]
+   (drop 1 (interleave (repeat sep) coll))))
 
 (defmacro definline
   "Experimental - like defmacro, except defines a named function whose
@@ -5630,6 +5670,19 @@
               (load-one lib need-ns require)
               @*loaded-libs*))))
 
+(defn- already-compiled? [lib]
+  (let [path (subs (root-resource lib) 1)
+        clj-path (str path ".clj")
+        class-path (str path "__init.class")
+        loader (clojure.lang.RT/baseLoader)
+        compiled-file (java.io.File. (str *compile-path* "/" class-path))
+        clj-url (.getResource loader clj-path)]
+    (or (and (.exists compiled-file)
+             (or (nil? clj-url)
+                 (> (clojure.lang.RT/lastModified (-> compiled-file .toURI .toURL) class-path)
+                    (clojure.lang.RT/lastModified clj-url clj-path))))
+        (.getResource loader class-path))))
+
 (defn- load-lib
   "Loads a lib with options"
   [prefix lib & options]
@@ -5639,7 +5692,9 @@
   (let [lib (if prefix (symbol (str prefix \. lib)) lib)
         opts (apply hash-map options)
         {:keys [as reload reload-all require use verbose]} opts
-        loaded (contains? @*loaded-libs* lib)
+        loaded (and (contains? @*loaded-libs* lib)
+                    (or (not *compile-files*)
+                        (already-compiled? lib)))
         load (cond reload-all
                    load-all
                    (or reload (not require) (not loaded))
@@ -5900,12 +5955,6 @@
   {:added "1.0"
    :static true}
   [x] (instance? clojure.lang.IPersistentList x))
-
-(defn set?
-  "Returns true if x implements IPersistentSet"
-  {:added "1.0"
-   :static true}
-  [x] (instance? clojure.lang.IPersistentSet x))
 
 (defn ifn?
   "Returns true if x implements IFn. Note that many data structures
@@ -6456,9 +6505,13 @@
   items, returns val and f is not called."
   {:added "1.0"}
   ([f coll]
-     (clojure.core.protocols/coll-reduce coll f))
+     (if (instance? clojure.lang.IReduce coll)
+       (.reduce ^clojure.lang.IReduce coll f)
+       (clojure.core.protocols/coll-reduce coll f)))
   ([f val coll]
-     (clojure.core.protocols/coll-reduce coll f val)))
+     (if (instance? clojure.lang.IReduceInit coll)
+       (.reduce ^clojure.lang.IReduceInit coll f val)
+       (clojure.core.protocols/coll-reduce coll f val))))
 
 (extend-protocol clojure.core.protocols/IKVReduce
  nil
@@ -6933,22 +6986,31 @@
   "Returns a lazy sequence consisting of the result of applying f to 0
   and the first item of coll, followed by applying f to 1 and the second
   item in coll, etc, until coll is exhausted. Thus function f should
-  accept 2 arguments, index and item."
+  accept 2 arguments, index and item. Returns a stateful transducer when
+  no collection is provided."
   {:added "1.2"
    :static true}
-  [f coll]
-  (letfn [(mapi [idx coll]
-            (lazy-seq
-             (when-let [s (seq coll)]
-               (if (chunked-seq? s)
-                 (let [c (chunk-first s)
-                       size (int (count c))
-                       b (chunk-buffer size)]
-                   (dotimes [i size]
-                     (chunk-append b (f (+ idx i) (.nth c i))))
-                   (chunk-cons (chunk b) (mapi (+ idx size) (chunk-rest s))))
-                 (cons (f idx (first s)) (mapi (inc idx) (rest s)))))))]
-    (mapi 0 coll)))
+  ([f]
+   (fn [rf]
+     (let [i (volatile! -1)]
+       (fn
+         ([] (rf))
+         ([result] (rf result))
+         ([result input]
+          (rf result (f (vswap! i inc) input)))))))
+  ([f coll]
+   (letfn [(mapi [idx coll]
+                 (lazy-seq
+                   (when-let [s (seq coll)]
+                     (if (chunked-seq? s)
+                       (let [c (chunk-first s)
+                             size (int (count c))
+                             b (chunk-buffer size)]
+                         (dotimes [i size]
+                           (chunk-append b (f (+ idx i) (.nth c i))))
+                         (chunk-cons (chunk b) (mapi (+ idx size) (chunk-rest s))))
+                       (cons (f idx (first s)) (mapi (inc idx) (rest s)))))))]
+     (mapi 0 coll))))
 
 (defn keep
   "Returns a lazy sequence of the non-nil results of (f item). Note,
@@ -7277,7 +7339,9 @@
    (seq [_] (seq (sequence xform coll)))
 
    clojure.lang.IReduceInit
-   (reduce [_ f init] (transduce xform f init coll))
+   (reduce [_ f init]
+     ;; NB (completing f) isolates completion of inner rf from outer rf
+     (transduce xform (completing f) init coll))
 
    clojure.lang.Sequential)
 
